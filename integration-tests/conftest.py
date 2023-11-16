@@ -264,12 +264,12 @@ def launcher(event_loop):
 
     @contextlib.contextmanager
     def docker_launcher(
-        model_id: str,
-        num_shard: Optional[int] = None,
-        quantize: Optional[str] = None,
-        trust_remote_code: bool = False,
-        use_flash_attention: bool = True,
-    ):
+            model_id: str,
+            num_shard: Optional[int] = None,
+            quantize: Optional[str] = None,
+            trust_remote_code: bool = False,
+            use_flash_attention: bool = True,
+        ):
         port = random.randint(8000, 10_000)
 
         args = ["--model-id", model_id, "--env"]
@@ -286,13 +286,10 @@ def launcher(event_loop):
 
         container_name = f"lorax-tests-{model_id.split('/')[-1]}-{num_shard}-{quantize}"
 
-        try:
+        with contextlib.suppress(NotFound):
             container = client.containers.get(container_name)
             container.stop()
             container.wait()
-        except NotFound:
-            pass
-
         gpu_count = num_shard if num_shard is not None else 1
 
         env = {"LOG_LEVEL": "info,lorax_router=debug"}
@@ -325,20 +322,15 @@ def launcher(event_loop):
         if not use_flash_attention:
             del env["USE_FLASH_ATTENTION"]
 
-        try:
+        with contextlib.suppress(NotFound):
             container.stop()
             container.wait()
-        except NotFound:
-            pass
-
         container_output = container.logs().decode("utf-8")
         print(container_output, file=sys.stderr)
 
         container.remove()
 
-    if DOCKER_IMAGE is not None:
-        return docker_launcher
-    return local_launcher
+    return docker_launcher if DOCKER_IMAGE is not None else local_launcher
 
 
 @pytest.fixture(scope="module")

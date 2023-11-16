@@ -27,16 +27,15 @@ def _get_bucket_resource():
         )
     )
     s3 = boto3.resource('s3', config=config)
-    bucket = os.getenv("PREDIBASE_MODEL_BUCKET")
-    if not bucket:
+    if bucket := os.getenv("PREDIBASE_MODEL_BUCKET"):
+        return s3.Bucket(bucket)
+    else:
         raise ValueError("PREDIBASE_MODEL_BUCKET environment variable is not set")
-    return s3.Bucket(bucket)
 
 
 def get_s3_model_local_dir(model_id: str):
     object_id = model_id.replace("/", "--")
-    repo_cache = Path(HUGGINGFACE_HUB_CACHE) / f"models--{object_id}" / "snapshots"
-    return repo_cache
+    return Path(HUGGINGFACE_HUB_CACHE) / f"models--{object_id}" / "snapshots"
 
 
 def weight_s3_files(
@@ -44,13 +43,17 @@ def weight_s3_files(
 ) -> List[str]:
     """Get the weights filenames from s3"""
     model_files = bucket.objects.filter(Prefix=model_id)
-    filenames = [f.key.removeprefix(model_id).lstrip("/") for f in model_files if f.key.endswith(extension)]
-    if not filenames:
+    if filenames := [
+        f.key.removeprefix(model_id).lstrip("/")
+        for f in model_files
+        if f.key.endswith(extension)
+    ]:
+        return filenames
+    else:
         raise EntryNotFoundError(
             f"No {extension} weights found for model {model_id}",
             None,
         )
-    return filenames
 
 
 def download_files_from_s3(
@@ -105,13 +108,13 @@ def weight_files_s3(
     # Local model
     local_path = get_s3_model_local_dir(model_id)
     if local_path.exists() and local_path.is_dir():
-        local_files = list(local_path.glob(f"*{extension}"))
-        if not local_files:
+        if local_files := list(local_path.glob(f"*{extension}")):
+            return local_files
+
+        else:
             raise FileNotFoundError(
                 f"No local weights found in {model_id} with extension {extension}"
             )
-        return local_files
-
     try:
         filenames = weight_s3_files(bucket, model_id, extension)
     except EntryNotFoundError as e:
@@ -146,7 +149,7 @@ def weight_files_s3(
 def download_model_from_s3(bucket: Any, model_id: str, extension: str = ".safetensors"):
     model_files = bucket.objects.filter(Prefix=model_id)
     # ensure that only one model is retrieved by filtering on the first dir of the path
-    total_models = set([Path(f.key).parts[0] for f in model_files])
+    total_models = {Path(f.key).parts[0] for f in model_files}
     if len(total_models) > 1:
         raise ValueError(f"Multiple models found for model_id {model_id}")
 

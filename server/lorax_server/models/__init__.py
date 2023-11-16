@@ -61,11 +61,9 @@ except ImportError as e:
     FLASH_ATTENTION = False
 
 if FLASH_ATTENTION:
-    __all__.append(FlashNeoXSharded)
-    __all__.append(FlashRWSharded)
-    __all__.append(FlashSantacoderSharded)
-    __all__.append(FlashLlama)
-    
+    __all__.extend(
+        (FlashNeoXSharded, FlashRWSharded, FlashSantacoderSharded, FlashLlama)
+    )
 MISTRAL = True
 try:
     from lorax_server.models.flash_mistral import FlashMistral

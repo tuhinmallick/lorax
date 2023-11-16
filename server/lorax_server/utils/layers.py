@@ -67,18 +67,12 @@ class FastLinear(nn.Module):
     ) -> None:
         super().__init__()
         self.weight = nn.Parameter(weight)
-        if bias is not None:
-            self.bias = nn.Parameter(bias)
-        else:
-            self.bias = None
+        self.bias = nn.Parameter(bias) if bias is not None else None
 
     @classmethod
     def load(cls, config, prefix: str, weights, bias: bool):
         weight = weights.get_tensor(f"{prefix}.weight")
-        if bias:
-            bias = weights.get_tensor(f"{prefix}.bias")
-        else:
-            bias = None
+        bias = weights.get_tensor(f"{prefix}.bias") if bias else None
         return cls(weight, bias)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -159,7 +153,7 @@ def get_linear(weight, bias, quantize):
             qweight, qzeros, scales, g_idx, bits, groupsize, use_exllama = weight
         except Exception:
             raise NotImplementedError(
-                f"The passed weight is not `gptq` compatible, loader needs to be updated."
+                "The passed weight is not `gptq` compatible, loader needs to be updated."
             )
 
         if use_exllama:
@@ -341,10 +335,9 @@ class TensorParallelAdapterLinear(nn.Module):
 
             if self.process_group.size() > 1:
                 a_out = self.collect_lora_a(a_out)
-            
+
             lora_b = data.lora_b[adapter_index][self.layer_id, :, :]
-            result = (a_out @ lora_b) * scaling * adapter_mask
-            return result
+            return (a_out @ lora_b) * scaling * adapter_mask
         except Exception as e:
             raise RuntimeError(f"adapter_mask={adapter_mask.shape}, input={input.shape}, lora_a={lora_a.shape}, lora_b={lora_b.shape}") from e
 
@@ -517,18 +510,17 @@ try:
     import rotary_emb
 
     def _create_inv_freq(dim, base, device):
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, device=device, dtype=torch.float32) / dim)
+        return 1.0 / (
+            base
+            ** (torch.arange(0, dim, 2, device=device, dtype=torch.float32) / dim)
         )
-        return inv_freq
 
     def _get_rope_config(config):
         if os.getenv("ROPE_SCALING", None) is not None:
-            rope_scaling = {
+            return {
                 "type": os.environ["ROPE_SCALING"],
                 "factor": float(os.environ["ROPE_FACTOR"]),
             }
-            return rope_scaling
         return getattr(config, "rope_scaling", None)
 
     class PositionRotaryEmbedding(nn.Module):

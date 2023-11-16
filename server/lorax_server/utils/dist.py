@@ -62,20 +62,19 @@ def initialize_torch_distributed():
 
     if WORLD_SIZE == 1:
         return FakeGroup(RANK, WORLD_SIZE), RANK, WORLD_SIZE
+    if os.getenv("DEBUG", None) == "1":
+        return FakeGroup(RANK, WORLD_SIZE), RANK, WORLD_SIZE
+
+    if torch.distributed.is_initialized():
+        logger.warning("torch.distributed is already initialized.")
+
     else:
-        if os.getenv("DEBUG", None) == "1":
-            return FakeGroup(RANK, WORLD_SIZE), RANK, WORLD_SIZE
-
-        if not torch.distributed.is_initialized():
-            # Call the init process.
-            torch.distributed.init_process_group(
-                backend=backend,
-                world_size=WORLD_SIZE,
-                rank=RANK,
-                timeout=timedelta(seconds=60),
-                pg_options=options,
-            )
-        else:
-            logger.warning("torch.distributed is already initialized.")
-
-        return torch.distributed.group.WORLD, RANK, WORLD_SIZE
+        # Call the init process.
+        torch.distributed.init_process_group(
+            backend=backend,
+            world_size=WORLD_SIZE,
+            rank=RANK,
+            timeout=timedelta(seconds=60),
+            pg_options=options,
+        )
+    return torch.distributed.group.WORLD, RANK, WORLD_SIZE

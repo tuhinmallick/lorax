@@ -35,14 +35,18 @@ def load_module_map(model_id, adapter_id, adapter_source, weight_names):
     adapter_weights = {}
     for filename in adapter_filenames:
         adapter_weights.update(load_file(filename))
-        
-    # map the model weights to the relevant adapter weights (LoRA A and B matrices)
-    module_map = {}
-    for weight_name in weight_names:
-        module_map[weight_name] = {
-            "lora_A": adapter_weights[f"base_model.model.{weight_name}.lora_A.weight"],
-            "lora_B": adapter_weights[f"base_model.model.{weight_name}.lora_B.weight"],
+
+    module_map = {
+        weight_name: {
+            "lora_A": adapter_weights[
+                f"base_model.model.{weight_name}.lora_A.weight"
+            ],
+            "lora_B": adapter_weights[
+                f"base_model.model.{weight_name}.lora_B.weight"
+            ],
         }
+        for weight_name in weight_names
+    }
     return module_map, adapter_config
 
 
@@ -60,8 +64,7 @@ def compute_delta_weight(
     Reference: https://github.com/huggingface/peft/blob/v0.4.0/src/peft/tuners/lora.py#L799-L806
     """
     scaling = alpha / r
-    delta_weight = transpose(lora_B @ lora_A, fan_in_fan_out) * scaling
-    return delta_weight
+    return transpose(lora_B @ lora_A, fan_in_fan_out) * scaling
 
 
 def merge_adapter_weights(
@@ -115,7 +118,7 @@ def create_merged_weight_files(
     if adapter_config.base_model_name_or_path != model_id:
         raise ValueError(f"Adapter '{adapter_id}' is not compatible with model '{model_id}'. "
                          f"Use --model-id '{adapter_config.base_model_name_or_path}' instead.")
-    
+
     # load adapter weights from all shards (should have relatively small memory footprint)
     adapter_weights = {}
     for filename in adapter_filenames:
@@ -124,7 +127,7 @@ def create_merged_weight_files(
 
     merged_weight_directory = Path(HUGGINGFACE_HUB_CACHE) / f"models--{adapter_id.replace('/', '--')}-merged"
     # just grab the existing files if they already exist and return immediately
-    lock = FileLock(str(merged_weight_directory)+ ".lock")
+    lock = FileLock(f"{str(merged_weight_directory)}.lock")
     with lock:
         if merged_weight_directory.is_dir():
             logger.info(f"Merged weight directory {merged_weight_directory} exist, skipping merge computation.")
@@ -142,7 +145,7 @@ def create_merged_weight_files(
             model_weights = load_file(filename)
             merged_weights, processed_adapter_weight_names = merge_adapter_weights(
                 model_weights, adapter_weights, adapter_config)
-            
+
             merged_adapter_filename = Path(merged_weight_directory, os.path.basename(filename))
             save_file(merged_weights, merged_adapter_filename)
             logger.debug(f"Saved merged weights into {merged_adapter_filename}")
@@ -150,7 +153,7 @@ def create_merged_weight_files(
             merged_weight_filenames.append(merged_adapter_filename)
             remaining_adapter_weight_names = remaining_adapter_weight_names.difference(
                 processed_adapter_weight_names)
-        
+
         if len(remaining_adapter_weight_names) > 0:
             logger.warning("WARNING: The following lora weights were not merged into the model weights:")
             for lora_name in remaining_adapter_weight_names:
