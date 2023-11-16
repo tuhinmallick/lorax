@@ -74,11 +74,7 @@ class AdapterBatchData:
 
     @staticmethod
     def from_meta(meta: AdapterBatchMetadata, weights: Dict[str, "BatchedLoraWeights"]) -> "AdapterBatchData":
-        data = {}
-        for k, v in weights.items():
-            if v.is_empty():
-                continue
-            data[k] = v.get_data(meta)
+        data = {k: v.get_data(meta) for k, v in weights.items() if not v.is_empty()}
         return AdapterBatchData(meta=meta, data=data)
 
 
@@ -157,14 +153,18 @@ class BatchedLoraWeights:
             device=device,
         )
 
-        r = set([
-            (self.lora_weights[idx].adapter_config.r if idx in self.lora_weights else None)
+        r = {
+            self.lora_weights[idx].adapter_config.r
+            if idx in self.lora_weights
+            else None
             for idx in segment_indices
-        ])
-        alpha = set([
-            (self.lora_weights[idx].adapter_config.lora_alpha if idx in self.lora_weights else None) 
+        }
+        alpha = {
+            self.lora_weights[idx].adapter_config.lora_alpha
+            if idx in self.lora_weights
+            else None
             for idx in segment_indices
-        ])
+        }
         adapter_index_configs = {
             idx: self.lora_weights[idx].adapter_config
             for idx in segment_indices

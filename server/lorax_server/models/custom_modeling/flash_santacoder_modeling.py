@@ -37,68 +37,70 @@ def load_multi_mqa(
 def _load_multi_mqa_gptq(
     config, prefix: str, weights, bias: bool, head_size, num_heads, hidden_size
 ):
-    if any("c_attn" in k for k in weights.routing.keys()) and not config.transpose:
-        world_size = weights.process_group.size()
-        rank = weights.process_group.rank()
-
-        slice_ = weights._get_slice(f"{prefix}.c_attn.qweight")
-        shape = slice_.get_shape()
-        block_size = (shape[1] - 2 * head_size) // world_size
-        start = rank * block_size
-        stop = (rank + 1) * block_size
-        assert (shape[1] - 2 * head_size) % world_size == 0
-        q_tensor = slice_[:, start:stop]
-        kv_tensor = slice_[:, -2 * head_size :]
-        qweight = torch.cat([q_tensor, kv_tensor], dim=1)
-        qweight = qweight.to(device=weights.device)
-
-        slice_ = weights._get_slice(f"{prefix}.c_attn.scales")
-        shape = slice_.get_shape()
-        block_size = (shape[1] - 2 * head_size) // world_size
-        start = rank * block_size
-        stop = (rank + 1) * block_size
-        assert (shape[1] - 2 * head_size) % world_size == 0
-        q_tensor = slice_[:, start:stop]
-        kv_tensor = slice_[:, -2 * head_size :]
-        scales = torch.cat([q_tensor, kv_tensor], dim=1)
-        scales = scales.to(device=weights.device)
-
-        slice_ = weights._get_slice(f"{prefix}.c_attn.qzeros")
-        shape = slice_.get_shape()
-        block_size = (shape[1] - (2 * head_size) * 4 // 32) // world_size
-        start = rank * block_size
-        stop = (rank + 1) * block_size
-        assert 2 * head_size % (32 // 4) == 0
-        q_tensor = slice_[:, start:stop]
-        kv_tensor = slice_[:, -2 * head_size * 4 // 32 :]
-        qzeros = torch.cat([q_tensor, kv_tensor], dim=1)
-        qzeros = qzeros.to(device=weights.device)
-
-        g_idx = weights.get_tensor(f"{prefix}.c_attn.g_idx")
-        g_idx = g_idx.to(device=weights.device)
-        bits, groupsize = weights._get_gptq_params()
-
-        from lorax_server.utils.layers import HAS_EXLLAMA
-
-        use_exllama = HAS_EXLLAMA
-        weight = (qweight, qzeros, scales, g_idx, bits, groupsize, use_exllama)
-
-        if bias:
-            slice_ = weights._get_slice(f"{prefix}.c_attn.bias")
-            shape = slice_.get_shape()
-            block_size = (shape[0] - 2 * head_size) // world_size
-            assert (shape[0] - 2 * head_size) % world_size == 0
-            q_tensor = slice_[start:stop]
-            start = rank * block_size
-            stop = (rank + 1) * block_size
-            q_tensor = slice_[start:stop]
-            kv_tensor = slice_[-2 * head_size :]
-            bias = torch.cat([q_tensor, kv_tensor], dim=0)
-            bias = bias.to(device=weights.device)
-
-        return TensorParallelColumnLinear(get_linear(weight, bias, config.quantize))
-    else:
+    if (
+        all("c_attn" not in k for k in weights.routing.keys())
+        or config.transpose
+    ):
         raise NotImplementedError("Gptq loading with santacoder is not implemented")
+    world_size = weights.process_group.size()
+    rank = weights.process_group.rank()
+
+    slice_ = weights._get_slice(f"{prefix}.c_attn.qweight")
+    shape = slice_.get_shape()
+    block_size = (shape[1] - 2 * head_size) // world_size
+    start = rank * block_size
+    stop = (rank + 1) * block_size
+    assert (shape[1] - 2 * head_size) % world_size == 0
+    q_tensor = slice_[:, start:stop]
+    kv_tensor = slice_[:, -2 * head_size :]
+    qweight = torch.cat([q_tensor, kv_tensor], dim=1)
+    qweight = qweight.to(device=weights.device)
+
+    slice_ = weights._get_slice(f"{prefix}.c_attn.scales")
+    shape = slice_.get_shape()
+    block_size = (shape[1] - 2 * head_size) // world_size
+    start = rank * block_size
+    stop = (rank + 1) * block_size
+    assert (shape[1] - 2 * head_size) % world_size == 0
+    q_tensor = slice_[:, start:stop]
+    kv_tensor = slice_[:, -2 * head_size :]
+    scales = torch.cat([q_tensor, kv_tensor], dim=1)
+    scales = scales.to(device=weights.device)
+
+    slice_ = weights._get_slice(f"{prefix}.c_attn.qzeros")
+    shape = slice_.get_shape()
+    block_size = (shape[1] - (2 * head_size) * 4 // 32) // world_size
+    start = rank * block_size
+    stop = (rank + 1) * block_size
+    assert 2 * head_size % (32 // 4) == 0
+    q_tensor = slice_[:, start:stop]
+    kv_tensor = slice_[:, -2 * head_size * 4 // 32 :]
+    qzeros = torch.cat([q_tensor, kv_tensor], dim=1)
+    qzeros = qzeros.to(device=weights.device)
+
+    g_idx = weights.get_tensor(f"{prefix}.c_attn.g_idx")
+    g_idx = g_idx.to(device=weights.device)
+    bits, groupsize = weights._get_gptq_params()
+
+    from lorax_server.utils.layers import HAS_EXLLAMA
+
+    use_exllama = HAS_EXLLAMA
+    weight = (qweight, qzeros, scales, g_idx, bits, groupsize, use_exllama)
+
+    if bias:
+        slice_ = weights._get_slice(f"{prefix}.c_attn.bias")
+        shape = slice_.get_shape()
+        block_size = (shape[0] - 2 * head_size) // world_size
+        assert (shape[0] - 2 * head_size) % world_size == 0
+        q_tensor = slice_[start:stop]
+        start = rank * block_size
+        stop = (rank + 1) * block_size
+        q_tensor = slice_[start:stop]
+        kv_tensor = slice_[-2 * head_size :]
+        bias = torch.cat([q_tensor, kv_tensor], dim=0)
+        bias = bias.to(device=weights.device)
+
+    return TensorParallelColumnLinear(get_linear(weight, bias, config.quantize))
 
 
 def _load_multi_mqa(
@@ -179,10 +181,7 @@ def load_col(config, prefix: str, weights, bias: bool):
             [prefix], quantize=config.quantize, dim=0
         )
 
-    if bias:
-        bias = weights.get_sharded(f"{prefix}.bias", dim=0)
-    else:
-        bias = None
+    bias = weights.get_sharded(f"{prefix}.bias", dim=0) if bias else None
     return TensorParallelColumnLinear(get_linear(weight, bias, config.quantize))
 
 
@@ -476,5 +475,4 @@ class FlashSantacoderForCausalLM(nn.Module):
         )
         if lm_head_indices is not None:
             hidden_states = hidden_states[lm_head_indices]
-        logits = self.lm_head(hidden_states)
-        return logits
+        return self.lm_head(hidden_states)

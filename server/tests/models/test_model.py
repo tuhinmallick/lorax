@@ -7,6 +7,7 @@ from lorax_server.models import Model
 
 
 def get_test_model():
+
     class TestModel(Model):
         def batch_type(self):
             raise NotImplementedError
@@ -16,10 +17,13 @@ def get_test_model():
 
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b")
 
-    model = TestModel(
-        torch.nn.Linear(1, 1), tokenizer, False, torch.float32, torch.device("cpu")
+    return TestModel(
+        torch.nn.Linear(1, 1),
+        tokenizer,
+        False,
+        torch.float32,
+        torch.device("cpu"),
     )
-    return model
 
 
 @pytest.mark.private

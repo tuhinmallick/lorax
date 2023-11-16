@@ -42,16 +42,7 @@ def create_exllama_buffers():
 
     assert DEVICE is not None, "call set_device first"
 
-    if ACT_ORDER:
-        # TODO: this should be set to rust side `max_total_tokens`, but TGI
-        # does not offer an API to expose this variable to python, as this variable
-        # is handled by the client but it appears the model is initialized by the server.
-        # An alternative could be to initialize the buffers during warmup.
-        # Dummy
-        max_total_tokens = 2048
-    else:
-        max_total_tokens = 1
-
+    max_total_tokens = 2048 if ACT_ORDER else 1
     # This temp_state buffer is required to reorder X in the act-order case.
     temp_state = torch.zeros(
         (max_total_tokens, MAX_INNER), dtype=torch.float16, device=DEVICE
@@ -114,13 +105,13 @@ class Ex4bitLinear:
             assert groupsize == self.groupsize
 
         # Handle act-order matrix
-        if self.g_idx is not None:
-            if self.groupsize is None:
-                raise ValueError("Found group index but no groupsize. What do?")
-            self.act_order = True
-        else:
+        if self.g_idx is None:
             self.act_order = False
 
+        elif self.groupsize is None:
+            raise ValueError("Found group index but no groupsize. What do?")
+        else:
+            self.act_order = True
         DEVICE = self.qweight.device
 
         MAX_DQ = max(MAX_DQ, self.qweight.numel() * 8)

@@ -39,12 +39,11 @@ class FlashLlama(FlashCausalLM):
         trust_remote_code: bool = False,
     ):
         self.process_group, rank, world_size = initialize_torch_distributed()
-        if torch.cuda.is_available():
-            device = torch.device(f"cuda:{rank}")
-            dtype = torch.float16 if dtype is None else dtype
-        else:
+        if not torch.cuda.is_available():
             raise NotImplementedError("FlashLlama is only available on GPU")
 
+        device = torch.device(f"cuda:{rank}")
+        dtype = torch.float16 if dtype is None else dtype
         try:
             tokenizer = LlamaTokenizer.from_pretrained(
                 model_id,
@@ -77,7 +76,7 @@ class FlashLlama(FlashCausalLM):
         merged_weight_filenames = None
         self.dynamic_adapter_loading_enabled = True
         self.adapter_id = BASE_MODEL_ADAPTER_ID
-        if len(adapter_id) > 0:
+        if adapter_id != "":
             logger.info(f"Merging adapter weights from adapter_id {adapter_id} into model weights.")
             # Need to pass the adapter source here
             merged_weight_filenames = create_merged_weight_files(
@@ -127,7 +126,7 @@ class FlashLlama(FlashCausalLM):
                 orig_q_proj_device = q_proj.device
                 weight_name = f"{prefix}.{i}.self_attn.q_proj"
                 self.orig_weights[weight_name] = (q_proj.cpu(), orig_q_proj_device)
-                
+
                 orig_v_proj_device = v_proj.device
                 weight_name = f"{prefix}.{i}.self_attn.v_proj"
                 self.orig_weights[weight_name] = (v_proj.cpu(), orig_v_proj_device)

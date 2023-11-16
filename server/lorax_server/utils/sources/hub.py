@@ -21,8 +21,7 @@ WEIGHTS_CACHE_OVERRIDE = os.getenv("WEIGHTS_CACHE_OVERRIDE", None)
 
 def get_hub_model_local_dir(model_id: str) -> Path:
     object_id = model_id.replace("/", "--")
-    repo_cache = Path(HUGGINGFACE_HUB_CACHE) / f"models--{object_id}"
-    return repo_cache
+    return Path(HUGGINGFACE_HUB_CACHE) / f"models--{object_id}"
 
 
 def weight_hub_files(
@@ -31,7 +30,7 @@ def weight_hub_files(
     """Get the weights filenames on the hub"""
     api = HfApi()
     info = api.model_info(model_id, revision=revision)
-    filenames = [
+    if filenames := [
         s.rfilename
         for s in info.siblings
         if s.rfilename.endswith(extension)
@@ -39,15 +38,13 @@ def weight_hub_files(
         and "arguments" not in s.rfilename
         and "args" not in s.rfilename
         and "training" not in s.rfilename
-    ]
-
-    if not filenames:
+    ]:
+        return filenames
+    else:
         raise EntryNotFoundError(
             f"No {extension} weights found for model {model_id} and revision {revision}.",
             None,
         )
-
-    return filenames
 
 
 
@@ -57,13 +54,13 @@ def weight_files(
     """Get the local files"""
     # Local model
     if Path(model_id).exists() and Path(model_id).is_dir():
-        local_files = list(Path(model_id).glob(f"*{extension}"))
-        if not local_files:
+        if local_files := list(Path(model_id).glob(f"*{extension}")):
+            return local_files
+
+        else:
             raise FileNotFoundError(
                 f"No local weights found in {model_id} with extension {extension}"
             )
-        return local_files
-
     try:
         filenames = weight_hub_files(model_id, revision, extension)
     except EntryNotFoundError as e:

@@ -22,9 +22,8 @@ from .source import BaseModelSource, try_to_load_from_cache
 def get_model_local_dir(model_id: str):
     if os.path.isabs(model_id):
         return Path(model_id)
-    
-    repo_cache = Path(HUGGINGFACE_HUB_CACHE) / model_id
-    return repo_cache
+
+    return Path(HUGGINGFACE_HUB_CACHE) / model_id
 
 
 class LocalModelSource(BaseModelSource):
@@ -46,13 +45,13 @@ class LocalModelSource(BaseModelSource):
 
         local_path = get_model_local_dir(model_id)
         if local_path.exists() and local_path.is_dir():
-            local_files = list(local_path.glob(f"*{extension}"))
-            if not local_files:
+            if local_files := list(local_path.glob(f"*{extension}")):
+                return local_files
+
+            else:
                 raise FileNotFoundError(
                     f"No local weights found in {model_id} with extension {extension}"
                 )
-            return local_files
-        
         raise FileNotFoundError(
             f"No local weights found in {model_id} with extension {extension}"
         )
